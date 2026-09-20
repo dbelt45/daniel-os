@@ -121,3 +121,37 @@ components/                Card, TaskList, PageView
 supabase/schema.sql        tables, indexes, row-level security
 middleware.ts              session refresh and route guard
 ```
+
+## What happens when an integration fails
+
+Every outside system this app touches can fail, and none of them are allowed to
+take the page down. Each one returns a plain success-or-failure value instead of
+throwing, the failure is written to the `integration_log` table, and the card
+that depended on it says so on screen.
+
+| System | If it fails | What you see |
+|---|---|---|
+| Google Calendar | `getTodaysEvents` returns `ok: false` with a reason | The Today card shows "Calendar unavailable" and the reason, never an empty list that reads as "no meetings" |
+| GitHub | `getGithubActivity` returns `ok: false` | The Code card shows "GitHub unavailable" and the reason |
+| Anthropic (briefing) | `getBriefing` returns `ok: false` | The briefing box shows "Briefing unavailable" and why. The rest of the dashboard is untouched |
+| Anthropic (chat) | `/api/chat` answers with `ok: false` and an HTTP status | The chat shows "Chat unavailable" in place of a reply, and your question stays on screen |
+| Supabase | Queries return an error and the card falls back to its empty state | The card reads as empty. This is the one honest gap: a failed query and a genuinely empty table look the same |
+| Analytics | Never surfaced | Tracking failures are swallowed on purpose. Measurement must not break the thing it measures |
+
+The System card at the bottom right always shows the most recent failure of any
+kind, so a problem that has since recovered is still visible.
+
+**To see it for yourself:** remove `GITHUB_TOKEN` from the environment and reload.
+The Code card explains that no token is configured, the rest of the page is
+normal, and a row appears in `integration_log`.
+
+## Today's briefing and the chat
+
+- **The briefing** is the box at the top. It sends the current tasks, projects,
+  blockers, metrics, calendar and GitHub activity to Claude and asks for four
+  sentences or fewer. It is cached for 30 minutes, so a page refresh does not
+  cost another request.
+- **The chat** is at the bottom. Claude gets five tools and nothing else: list
+  tasks, add a task, complete a task, read status, and read today. Writes are
+  limited to your own rows by row level security, exactly like the rest of the app.
+- Both share one voice and one model, set in `lib/ai.ts`.

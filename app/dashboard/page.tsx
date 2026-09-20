@@ -1,5 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
 import { getTodaysEvents } from "@/lib/google-calendar";
+import { getGithubActivity } from "@/lib/github";
+import { getBriefing } from "@/lib/briefing";
+import { Chat } from "@/components/Chat";
 import { Card, Empty } from "@/components/Card";
 import { TaskList } from "@/components/TaskList";
 import { PageView } from "@/components/PageView";
@@ -12,7 +15,8 @@ export default async function Dashboard() {
 
   // Everything below is a real query against a real database. Nothing on this
   // page is mocked, which is Ricky's "no hard-coded or mock data" standard.
-  const [tasks, projects, blockers, metrics, calendar, recentEvents, lastFailure] =
+  const [tasks, projects, blockers, metrics, calendar, github, briefing,
+         recentEvents, lastFailure] =
     await Promise.all([
       supabase.from("tasks").select("id,title,status,priority,due_on")
         .neq("status", "done").order("priority").limit(12),
@@ -23,6 +27,10 @@ export default async function Dashboard() {
       supabase.from("metrics").select("id,label,value,unit,as_of")
         .order("as_of", { ascending: false }).limit(4),
       getTodaysEvents(),
+      getGithubActivity(),
+      // The briefing reads the same rows again rather than being handed them,
+      // so it can be called from anywhere without threading state through.
+      getBriefing(),
       supabase.from("events").select("id", { count: "exact", head: true }),
       supabase.from("integration_log").select("message,created_at,ok")
         .eq("ok", false).order("created_at", { ascending: false }).limit(1).maybeSingle(),
@@ -49,6 +57,24 @@ export default async function Dashboard() {
           </form>
         </div>
       </header>
+
+      <section className="mb-4 rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-5 shadow-sm">
+        <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-[var(--muted)]">
+          What needs your attention
+        </h2>
+        {briefing.ok ? (
+          <>
+            <p className="whitespace-pre-wrap text-[15px] leading-relaxed">{briefing.text}</p>
+            <p className="mt-2 text-xs text-[var(--muted)]">
+              {briefing.cached ? "Written in the last half hour." : "Written just now."}
+            </p>
+          </>
+        ) : (
+          <div className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
+            <strong className="font-medium">Briefing unavailable.</strong> {briefing.message}
+          </div>
+        )}
+      </section>
 
       <div className="grid gap-4 sm:grid-cols-2">
         <Card title="Tasks" hint={`${tasks.data?.length ?? 0} open`}>
@@ -93,6 +119,32 @@ export default async function Dashboard() {
           ) : <Empty>No active projects.</Empty>}
         </Card>
 
+        <Card title="Code" hint="GitHub, last 7 days">
+          {github.ok ? (
+            <>
+              <div className="text-2xl font-semibold tabular-nums">
+                {github.activity.commitsThisWeek}
+                <span className="text-base text-[var(--muted)]"> commits</span>
+              </div>
+              <ul className="mt-2 space-y-1">
+                {github.activity.repos.map((r) => (
+                  <li key={r.name} className="truncate text-sm">
+                    {r.name}
+                    <span className="text-[var(--muted)]">
+                      {" "}pushed {new Date(r.pushedAt).toLocaleDateString("en-US",
+                        { month: "short", day: "numeric" })}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : (
+            <div className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
+              <strong className="font-medium">GitHub unavailable.</strong> {github.message}
+            </div>
+          )}
+        </Card>
+
         <Card title="Blockers" hint={`${blockers.data?.length ?? 0} open`}>
           {blockers.data?.length ? (
             <ul className="space-y-2">
@@ -133,6 +185,13 @@ export default async function Dashboard() {
           </div>
         </Card>
       </div>
+
+      <section className="mt-4 rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-5 shadow-sm">
+        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-[var(--muted)]">
+          Ask Jarvis
+        </h2>
+        <Chat />
+      </section>
     </main>
   );
 }

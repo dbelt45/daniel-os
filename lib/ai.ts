@@ -2,11 +2,15 @@
 // briefing and the chat can never drift apart.
 //
 // Every AI call goes through OpenRouter (Ricky directive 2026-09-22): no
-// Anthropic or OpenAI keys. Inkling is the strongest free model with tool
-// calling (Artificial Analysis index 41, Sept 2026). Free models get rate
-// limited, so OpenRouter falls through to Nemotron 3 Ultra (38) when it is busy.
-export const MODEL = "thinkingmachines/inkling:free";
-const FALLBACKS = ["nvidia/nemotron-3-ultra-550b-a55b:free"];
+// Anthropic or OpenAI keys, free models only. Free models are often overloaded
+// or rate limited, and OpenRouter sometimes reports that inside a 200, where
+// its own fallback never fires. So we walk this list ourselves, in order.
+// Inkling scores higher but OpenRouter only serves it free to coding agents.
+export const MODELS = [
+  "nvidia/nemotron-3-ultra-550b-a55b:free", // strongest free model that serves apps
+  "nvidia/nemotron-3-super-120b-a12b:free", // same family, faster
+  "openrouter/free",                        // OpenRouter picks any free model that is up
+];
 
 export type Message = {
   role: "system" | "user" | "assistant" | "tool";
@@ -24,29 +28,42 @@ export function aiConfigured(): boolean {
   return Boolean(process.env.OPENROUTER_API_KEY);
 }
 
-/** One chat completion. Returns the assistant message, or throws with OpenRouter's reason. */
+/** One chat completion. Tries each model in turn; throws only when all of them fail. */
 export async function complete(messages: Message[], opts: { maxTokens: number; tools?: Tool[] }) {
-  const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
-      "Content-Type": "application/json",
-      "X-Title": "daniel-os",
-    },
-    body: JSON.stringify({
-      models: [MODEL, ...FALLBACKS],
-      messages,
-      max_tokens: opts.maxTokens,
-      ...(opts.tools ? { tools: opts.tools } : {}),
-    }),
-  });
-  const body = await res.json().catch(() => ({}));
-  if (!res.ok || body.error) {
-    throw new Error(`OpenRouter ${res.status}: ${body.error?.message ?? "unknown error"}`);
+  const failures: string[] = [];
+  for (const model of MODELS) {
+    try {
+      const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${process.env.OPENROUTER_API_KEY?.trim()}`,
+          "Content-Type": "application/json",
+          "X-Title": "daniel-os",
+        },
+        body: JSON.stringify({
+          model,
+          messages,
+          max_tokens: opts.maxTokens,
+          ...(opts.tools ? { tools: opts.tools } : {}),
+        }),
+        signal: AbortSignal.timeout(25_000),
+      });
+      const body = await res.json().catch(() => ({}));
+      const choice = body.choices?.[0];
+      const error = body.error?.message ?? choice?.error?.message;
+      if (!res.ok || error || !choice?.message) {
+        // A bad key fails every model the same way, so stop and say so.
+        if (res.status === 401) throw new Error("OpenRouter rejected the key (401).");
+        failures.push(`${model}: ${error ?? `HTTP ${res.status}`}`);
+        continue;
+      }
+      return { message: choice.message as Message, finish: choice.finish_reason as string };
+    } catch (e) {
+      if (e instanceof Error && e.message.startsWith("OpenRouter rejected")) throw e;
+      failures.push(`${model}: ${e instanceof Error ? e.message : "request failed"}`);
+    }
   }
-  const choice = body.choices?.[0];
-  if (!choice) throw new Error("OpenRouter returned no answer.");
-  return { message: choice.message as Message, finish: choice.finish_reason as string };
+  throw new Error(`Every free model is busy right now. ${failures.join(" | ")}`);
 }
 
 export const VOICE = `You are Jarvis, Daniel Belt's assistant. Daniel is Director of

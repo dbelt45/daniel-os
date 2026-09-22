@@ -1,23 +1,22 @@
 import { NextResponse, type NextRequest } from "next/server";
-import type Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@/lib/supabase/server";
 import { getTodaysEvents } from "@/lib/google-calendar";
 import { getGithubActivity } from "@/lib/github";
-import { aiClient, MODEL, VOICE } from "@/lib/ai";
+import { aiConfigured, complete, VOICE, type Message, type Tool } from "@/lib/ai";
 
-// Claude gets these five tools and nothing else. Reads are free; the only two
+// The model gets these five tools and nothing else. Reads are free; the only two
 // writes it can make are adding a task and closing one, and row level security
 // still scopes both to the signed-in user.
-const tools: Anthropic.Tool[] = [
+const defs = [
   {
     name: "list_tasks",
     description: "List Daniel's open tasks, highest priority first. Returns the task id, which is required to complete one.",
-    input_schema: { type: "object", properties: {}, additionalProperties: false, required: [] },
+    parameters: { type: "object", properties: {}, additionalProperties: false, required: [] },
   },
   {
     name: "add_task",
     description: "Add a new task for Daniel.",
-    input_schema: {
+    parameters: {
       type: "object",
       properties: {
         title: { type: "string", description: "What the task is, in Daniel's own words." },
@@ -31,7 +30,7 @@ const tools: Anthropic.Tool[] = [
   {
     name: "complete_task",
     description: "Mark one task done. Call list_tasks first to get the id.",
-    input_schema: {
+    parameters: {
       type: "object",
       properties: { task_id: { type: "string" } },
       required: ["task_id"],
@@ -41,14 +40,15 @@ const tools: Anthropic.Tool[] = [
   {
     name: "get_status",
     description: "Active projects, open blockers and the latest key metrics.",
-    input_schema: { type: "object", properties: {}, additionalProperties: false, required: [] },
+    parameters: { type: "object", properties: {}, additionalProperties: false, required: [] },
   },
   {
     name: "get_today",
     description: "Today's calendar events and this week's GitHub activity.",
-    input_schema: { type: "object", properties: {}, additionalProperties: false, required: [] },
+    parameters: { type: "object", properties: {}, additionalProperties: false, required: [] },
   },
 ];
+const tools: Tool[] = defs.map((function_) => ({ type: "function", function: function_ }));
 
 async function runTool(name: string, input: Record<string, unknown>) {
   const supabase = await createClient();
@@ -111,20 +111,24 @@ async function track(
 }
 
 export async function POST(request: NextRequest) {
-  const client = aiClient();
-  if (!client) {
+  if (!aiConfigured()) {
     return NextResponse.json(
-      { ok: false, message: "No Anthropic key is configured, so chat is off." }, { status: 503 });
+      { ok: false, message: "No OpenRouter key is configured, so chat is off." }, { status: 503 });
   }
 
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ ok: false, message: "Not signed in." }, { status: 401 });
 
-  let history: Anthropic.MessageParam[];
+  let history: Message[];
   try {
     const body = await request.json();
-    history = Array.isArray(body?.messages) ? body.messages.slice(-20) : [];
+    // Only plain user and assistant text comes from the browser.
+    history = Array.isArray(body?.messages)
+      ? body.messages.slice(-20)
+          .filter((m: Message) => (m.role === "user" || m.role === "assistant") && typeof m.content === "string")
+          .map((m: Message) => ({ role: m.role, content: m.content }))
+      : [];
   } catch {
     return NextResponse.json({ ok: false, message: "Bad request." }, { status: 400 });
   }
@@ -132,35 +136,29 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false, message: "Nothing to answer." }, { status: 400 });
   }
 
-  const messages = [...history];
+  const messages: Message[] = [{ role: "system", content: VOICE }, ...history];
   try {
     // Manual tool loop. Five rounds covers "what is overdue, close the first one".
     for (let round = 0; round < 5; round++) {
-      const response = await client.messages.create({
-        model: MODEL, max_tokens: 2000, system: VOICE, tools, messages,
-      });
+      const { message } = await complete(messages, { maxTokens: 2000, tools });
+      const calls = message.tool_calls ?? [];
 
-      if (response.stop_reason !== "tool_use") {
-        const text = response.content
-          .filter((b): b is Anthropic.TextBlock => b.type === "text")
-          .map((b) => b.text).join("\n").trim();
+      if (calls.length === 0) {
+        const text = (message.content ?? "").trim();
         return NextResponse.json({ ok: true, reply: text || "I have nothing to add." });
       }
 
-      messages.push({ role: "assistant", content: response.content });
-      const calls = response.content.filter(
-        (b): b is Anthropic.ToolUseBlock => b.type === "tool_use");
-
-      // Every result goes back in ONE user message. Splitting them teaches
-      // Claude to stop calling tools in parallel on later turns.
-      const results: Anthropic.ToolResultBlockParam[] = await Promise.all(
-        calls.map(async (call) => ({
-          type: "tool_result" as const,
-          tool_use_id: call.id,
-          content: JSON.stringify(await runTool(call.name, call.input as Record<string, unknown>)),
-        }))
-      );
-      messages.push({ role: "user", content: results });
+      messages.push({ role: "assistant", content: message.content ?? null, tool_calls: calls });
+      const results = await Promise.all(calls.map(async (call) => {
+        let input: Record<string, unknown> = {};
+        try { input = JSON.parse(call.function.arguments || "{}"); } catch { /* bad JSON, run with no input */ }
+        return {
+          role: "tool" as const,
+          tool_call_id: call.id,
+          content: JSON.stringify(await runTool(call.function.name, input)),
+        };
+      }));
+      messages.push(...results);
     }
     return NextResponse.json({ ok: true,
       reply: "That took more steps than I allow in one go. Ask me a narrower question." });

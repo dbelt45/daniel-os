@@ -10,7 +10,6 @@
     "check": "node scripts/check-integrations.mjs"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.127.0",
     "@supabase/ssr": "^0.5.2",
     "@supabase/supabase-js": "^2.45.4",
     "eslint-config-next": "^16.3.5",

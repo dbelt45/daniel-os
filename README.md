@@ -133,8 +133,8 @@ that depended on it says so on screen.
 |---|---|---|
 | Google Calendar | `getTodaysEvents` returns `ok: false` with a reason | The Today card shows "Calendar unavailable" and the reason, never an empty list that reads as "no meetings" |
 | GitHub | `getGithubActivity` returns `ok: false` | The Code card shows "GitHub unavailable" and the reason |
-| Anthropic (briefing) | `getBriefing` returns `ok: false` | The briefing box shows "Briefing unavailable" and why. The rest of the dashboard is untouched |
-| Anthropic (chat) | `/api/chat` answers with `ok: false` and an HTTP status | The chat shows "Chat unavailable" in place of a reply, and your question stays on screen |
+| OpenRouter (briefing) | `getBriefing` returns `ok: false` | The briefing box shows "Briefing unavailable" and why. The rest of the dashboard is untouched |
+| OpenRouter (chat) | `/api/chat` answers with `ok: false` and an HTTP status | The chat shows "Chat unavailable" in place of a reply, and your question stays on screen |
 | Supabase | Queries return an error and the card falls back to its empty state | The card reads as empty. This is the one honest gap: a failed query and a genuinely empty table look the same |
 | Analytics | Never surfaced | Tracking failures are swallowed on purpose. Measurement must not break the thing it measures |
 

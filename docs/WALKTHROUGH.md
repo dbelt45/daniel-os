@@ -14,7 +14,7 @@ the top it writes you a short briefing about what needs your attention. At the
 bottom you can type a question and it answers, or does small things for you.
 
 Four outside systems feed it. Google signs you in, Google Calendar gives today's
-events, GitHub gives your recent commits, and Anthropic's Claude writes the
+events, GitHub gives your recent commits, and a free model on OpenRouter writes the
 briefing and runs the chat.
 
 ---
@@ -56,7 +56,7 @@ simple: **a secret is replaced where it was issued, not where it is used.**
 | Supabase project URL and publishable key | Vercel environment variables | Supabase settings. These are not really secret, see below |
 | Your Google access token for calendar | The `integration_tokens` table, one row, server side only | It expires on its own within an hour, so there is nothing to rotate |
 | GitHub token | Vercel environment variables | GitHub, Developer settings, revoke and issue a new one |
-| Anthropic API key | Vercel environment variables | console.anthropic.com, delete the key and create another |
+| OpenRouter API key | Vercel environment variables | openrouter.ai/keys, delete the key and create another |
 
 **Why the Supabase key in the browser is not a leak.** It only names which
 project you are talking to. It carries no identity. Identity comes from your

@@ -1,8 +1,7 @@
-import type Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@/lib/supabase/server";
 import { getTodaysEvents } from "@/lib/google-calendar";
 import { getGithubActivity } from "@/lib/github";
-import { aiClient, MODEL, VOICE } from "@/lib/ai";
+import { aiConfigured, complete, VOICE } from "@/lib/ai";
 
 export type BriefingResult =
   | { ok: true; text: string; cached: boolean }
@@ -15,7 +14,7 @@ const MAX_AGE_MS = 30 * 60 * 1000;
 
 /**
  * The "What needs my attention?" briefing. Reads the same live rows the
- * dashboard renders, hands them to Claude, and returns a few sentences.
+ * dashboard renders, hands them to the model, and returns a few sentences.
  *
  * Never throws. If the AI is unreachable the dashboard still renders and says
  * why the briefing is missing.
@@ -25,9 +24,8 @@ export async function getBriefing(): Promise<BriefingResult> {
     return { ok: true, text: cache.text, cached: true };
   }
 
-  const client = aiClient();
-  if (!client) {
-    return { ok: false, message: "No Anthropic key is configured, so the briefing cannot be written." };
+  if (!aiConfigured()) {
+    return { ok: false, message: "No OpenRouter key is configured, so the briefing cannot be written." };
   }
 
   const supabase = await createClient();
@@ -51,11 +49,9 @@ export async function getBriefing(): Promise<BriefingResult> {
   };
 
   try {
-    const response = await client.messages.create({
-      model: MODEL,
-      max_tokens: 1000,
-      system: VOICE,
-      messages: [{
+    const { message } = await complete([
+      { role: "system", content: VOICE },
+      {
         role: "user",
         content: `Here is everything my systems know right now, as JSON.\n\n` +
           `${JSON.stringify(facts, null, 2)}\n\n` +
@@ -63,12 +59,10 @@ export async function getBriefing(): Promise<BriefingResult> {
           `single most urgent thing. Mention a blocker or an overdue task before anything ` +
           `routine. If a system came back unavailable, say so in half a sentence rather than ` +
           `pretending it is empty. If nothing needs me, say that plainly.`,
-      }],
-    });
+      },
+    ], { maxTokens: 1000 });
 
-    const text = response.content
-      .filter((b): b is Anthropic.TextBlock => b.type === "text")
-      .map((b) => b.text).join("\n").trim();
+    const text = (message.content ?? "").trim();
 
     if (!text) return { ok: false, message: "The AI returned an empty briefing." };
     cache = { text, at: Date.now() };

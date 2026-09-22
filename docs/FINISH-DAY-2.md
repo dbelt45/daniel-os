@@ -4,16 +4,23 @@ Four steps, about ten minutes, in this order. Everything else is done.
 
 ---
 
-## 1. Get the Anthropic key, paste it in two places (4 min)
+## 1. Get the OpenRouter key, paste it in two places (4 min)
 
-1. **console.anthropic.com**, sign in with your own Google account.
-2. Left side, **API keys**, then **Create key**. Name it `daniel-os`. Copy it now,
-   the site never shows it again.
-3. Under **Billing**, add $5 if it asks. Today's usage is pennies.
-4. Open `daniel-os/.env.local` and put it after `ANTHROPIC_API_KEY=` on the line
+Ricky directive 2026-09-22: no Anthropic or OpenAI keys. Every AI call goes
+through OpenRouter on a free model (`thinkingmachines/inkling:free`, falling back
+to `nvidia/nemotron-3-ultra-550b-a55b:free`).
+
+1. **openrouter.ai**, sign in with your own Google account.
+2. Top right menu, **Keys**, then **Create Key**. Name it `daniel-os`, leave the
+   credit limit blank. Copy it now, the site never shows it again.
+3. **Credits**: use the free starter credits if offered. Do not buy any without
+   asking Ricky. The model is free.
+4. Open `daniel-os/.env.local` and put it after `OPENROUTER_API_KEY=` on the line
    that is already waiting for it.
 5. In **Vercel**, your project, **Settings**, **Environment Variables**, add
-   `ANTHROPIC_API_KEY` with the same value, for all environments.
+   `OPENROUTER_API_KEY` with the same value, for all environments. Delete any
+   `ANTHROPIC_API_KEY` there.
+6. Run `npm run check`. OpenRouter should say WORKING.
 
 ## 2. Make a GitHub token for the live site (3 min)
 
@@ -77,7 +84,7 @@ evidence, not the code.
 
 - Built the briefing, the chat, the GitHub card, and the honest-failure behavior
 - Tested GitHub against your real account, 4 commits this week, repo `daniel-os`
-- Proved the failure path: with no key the chat answers "No Anthropic key is
+- Proved the failure path: with no key the chat answers "No OpenRouter key is
   configured, so chat is off" instead of breaking the page
 - Added `npm run check`, one command that tells you which systems are live
 - Wrote `docs/WALKTHROUGH.md`, the plain-English explanation of every design

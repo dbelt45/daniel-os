@@ -72,34 +72,30 @@ if (!gh) {
   }
 }
 
-// --------------------------------------------------------------- Anthropic
-const key = process.env.ANTHROPIC_API_KEY;
+// -------------------------------------------------------------- OpenRouter
+const key = process.env.OPENROUTER_API_KEY;
 if (!key) {
-  add("Anthropic", false, "no ANTHROPIC_API_KEY set, so the briefing and the chat are off");
+  add("OpenRouter", false, "no OPENROUTER_API_KEY set, so the briefing and the chat are off");
 } else {
   try {
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
+    const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
-      headers: {
-        "x-api-key": key,
-        "anthropic-version": "2023-06-01",
-        "content-type": "application/json",
-      },
+      headers: { Authorization: `Bearer ${key}`, "content-type": "application/json" },
       body: JSON.stringify({
-        model: "claude-opus-5",
+        models: ["thinkingmachines/inkling:free", "nvidia/nemotron-3-ultra-550b-a55b:free"],
         max_tokens: 16,
         messages: [{ role: "user", content: "Reply with the word ready." }],
       }),
     });
     const body = await res.json();
-    if (res.ok) {
-      const said = body.content?.find((b) => b.type === "text")?.text?.trim() ?? "";
-      add("Anthropic", true, `answered "${said}" using ${body.model}`);
+    if (res.ok && !body.error) {
+      const said = body.choices?.[0]?.message?.content?.trim() ?? "";
+      add("OpenRouter", true, `answered "${said}" using ${body.model}`);
     } else {
-      add("Anthropic", false, `${res.status}: ${body.error?.message ?? "unknown error"}`);
+      add("OpenRouter", false, `${res.status}: ${body.error?.message ?? "unknown error"}`);
     }
   } catch (e) {
-    add("Anthropic", false, e.message);
+    add("OpenRouter", false, e.message);
   }
 }
 

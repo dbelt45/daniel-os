@@ -54,9 +54,6 @@ export async function complete(messages: Message[], opts: { maxTokens: number; t
           // Let the model think (turning it off made it skip tools), but keep the
           // thinking out of the reply so "Okay, the user asked..." never shows.
           reasoning: { exclude: true },
-          // Without this OpenRouter may route to a provider that silently drops
-          // `tools`, and the model then invents tool calls as plain text.
-          provider: { require_parameters: true },
           max_tokens: opts.maxTokens,
           ...(opts.tools ? { tools: opts.tools } : {}),
         }),

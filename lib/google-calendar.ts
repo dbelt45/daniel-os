@@ -36,8 +36,34 @@ export async function getTodaysEvents(): Promise<CalendarResult> {
 
   const { data: tok } = await supabase
     .from("integration_tokens")
-    .select("access_token, expires_at")
+    .select("access_token, refresh_token, expires_at")
     .eq("user_id", user.id).eq("provider", "google").maybeSingle();
+
+  // Google's access token dies after an hour. The refresh token from sign-in
+  // buys a new one, so the calendar keeps working without signing in again.
+  // Documented in Google's "Using OAuth 2.0 for Web Server Applications",
+  // section "Refreshing an access token".
+  const refresh = async (): Promise<string | null> => {
+    const id = process.env.GOOGLE_CLIENT_ID, secret = process.env.GOOGLE_CLIENT_SECRET;
+    if (!tok?.refresh_token || !id || !secret) return null;
+    const res = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      body: new URLSearchParams({ client_id: id, client_secret: secret,
+        refresh_token: tok.refresh_token, grant_type: "refresh_token" }),
+      cache: "no-store",
+    }).catch(() => null);
+    const json = await res?.json().catch(() => null);
+    if (!json?.access_token) {
+      await log(false, res?.status ?? null, `Google refused the refresh: ${json?.error ?? "no response"}.`);
+      return null;
+    }
+    await supabase.from("integration_tokens").update({
+      access_token: json.access_token,
+      expires_at: new Date(Date.now() + (json.expires_in - 300) * 1000).toISOString(),
+      updated_at: new Date().toISOString(),
+    }).eq("user_id", user.id).eq("provider", "google");
+    return json.access_token;
+  };
 
   if (!tok?.access_token) {
     await log(false, null, "No Google token stored. Sign out and sign in again to grant calendar access.");
@@ -57,13 +83,20 @@ export async function getTodaysEvents(): Promise<CalendarResult> {
   url.searchParams.set("maxResults", "20");
 
   try {
-    const res = await fetch(url, {
-      headers: { Authorization: `Bearer ${tok.access_token}` },
-      cache: "no-store",
-    });
+    let token: string = tok.access_token;
+    if (tok.expires_at && new Date(tok.expires_at) < now) token = (await refresh()) ?? token;
+
+    const call = (t: string) => fetch(url, { headers: { Authorization: `Bearer ${t}` }, cache: "no-store" });
+    let res = await call(token);
+    if (res.status === 401) {
+      const fresh = await refresh();
+      if (fresh) res = await call(fresh);
+    }
 
     if (res.status === 401 || res.status === 403) {
-      await log(false, res.status, "Google rejected the token (expired or access revoked).");
+      // Google says why in the body (expired, scope not granted, API not enabled).
+      const why = (await res.text()).match(/"message":\s*"([^"]+)"/)?.[1] ?? "no reason given";
+      await log(false, res.status, `Google rejected the token: ${why}`);
       return { ok: false, reason: "expired",
                message: "Google access expired. Sign out and back in to reconnect." };
     }

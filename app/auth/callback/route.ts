@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
   // is refreshed.
   const session = data.session;
   if (session?.provider_token && session.user) {
-    await supabase.from("integration_tokens").upsert({
+    const { error: saveError } = await supabase.from("integration_tokens").upsert({
       user_id: session.user.id,
       provider: "google",
       access_token: session.provider_token,
@@ -36,6 +36,10 @@ export async function GET(request: NextRequest) {
       expires_at: new Date(Date.now() + 55 * 60 * 1000).toISOString(),
       updated_at: new Date().toISOString(),
     });
+    if (saveError) {
+      await supabase.from("integration_log").insert({ user_id: session.user.id, provider: "google_calendar",
+        ok: false, status: null, message: `Could not save the Google token at sign-in: ${saveError.message}` });
+    }
   }
 
   return NextResponse.redirect(`${origin}/dashboard`);

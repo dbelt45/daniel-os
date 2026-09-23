@@ -65,7 +65,7 @@ async function runTool(name: string, input: Record<string, unknown>) {
       const row = {
         user_id: user.id,
         title: String(input.title ?? "").slice(0, 300),
-        priority: Number(input.priority ?? 2),
+        priority: Math.min(3, Math.max(1, Math.round(Number(input.priority) || 2))),
         due_on: input.due_on ? String(input.due_on) : null,
       };
       if (!row.title) return { error: "A task needs a title." };

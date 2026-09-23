@@ -2,9 +2,12 @@
 // briefing and the chat can never drift apart.
 //
 // Every AI call goes through OpenRouter (Ricky directive 2026-09-22): no
-// Anthropic or OpenAI keys, free models only. Free models are often overloaded
-// or rate limited, and OpenRouter sometimes reports that inside a 200, where
-// its own fallback never fires. So we walk this list ourselves, in order.
+// Anthropic or OpenAI keys, free models only. Two layers of fallback:
+// 1. OpenRouter's own `models` list fails over inside one request, which covers
+//    ordinary errors (rate limits, a model that is down) at no extra cost.
+// 2. Sometimes a provider reports "overloaded" inside a normal 200 reply, where
+//    OpenRouter's failover never fires. We check every reply for that and, if
+//    found, ask again starting from the next model in the list.
 // Inkling scores higher but OpenRouter only serves it free to coding agents.
 export const MODELS = [
   "nvidia/nemotron-3-ultra-550b-a55b:free", // strongest free model that serves apps
@@ -31,7 +34,8 @@ export function aiConfigured(): boolean {
 /** One chat completion. Tries each model in turn; throws only when all of them fail. */
 export async function complete(messages: Message[], opts: { maxTokens: number; tools?: Tool[] }) {
   const failures: string[] = [];
-  for (const model of MODELS) {
+  for (let i = 0; i < MODELS.length; i++) {
+    const model = MODELS[i];
     try {
       const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
         method: "POST",
@@ -41,12 +45,15 @@ export async function complete(messages: Message[], opts: { maxTokens: number; t
           "X-Title": "daniel-os",
         },
         body: JSON.stringify({
-          model,
+          models: MODELS.slice(i),
           messages,
+          // Let the model think (turning it off made it skip tools), but keep the
+          // thinking out of the reply so "Okay, the user asked..." never shows.
+          reasoning: { exclude: true },
           max_tokens: opts.maxTokens,
           ...(opts.tools ? { tools: opts.tools } : {}),
         }),
-        signal: AbortSignal.timeout(25_000),
+        signal: AbortSignal.timeout(12_000),
       });
       const body = await res.json().catch(() => ({}));
       const choice = body.choices?.[0];

@@ -15,9 +15,11 @@ export default function LoginPage() {
       provider: "google",
       options: {
         redirectTo: `${window.location.origin}/auth/callback`,
-        // Calendar read access is requested at sign-in, so one login covers
-        // both the auth requirement and the first live integration.
-        scopes: "https://www.googleapis.com/auth/calendar.readonly",
+        // Calendar access is requested at sign-in, so one login covers both the
+        // auth requirement and the integration. calendar.events lets Jarvis in
+        // Pocket add and remove events, not just read them. It covers events
+        // only, not calendar settings or sharing.
+        scopes: "https://www.googleapis.com/auth/calendar.events",
         queryParams: { access_type: "offline", prompt: "consent" },
       },
     });

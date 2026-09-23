@@ -139,10 +139,14 @@ already recovered.
 
 Say these before anyone finds them.
 
-- **The calendar only works while you are signed in on the site.** Google's
-  token is short-lived and we store no refresh token yet, so nothing outside the
-  browser can read your calendar. That is why a morning briefing cannot be
-  emailed to you yet.
+- **The calendar renews itself, but only when the page loads.** Google's access
+  token lasts an hour. Since Day 2 the app stores the refresh token and trades
+  it for a new one when needed, but that only happens when someone opens the
+  dashboard. Nothing runs on a schedule yet, so a morning briefing cannot be
+  emailed to you.
+- **The AI is free, so it is sometimes busy.** Three free models are tried in
+  order. If all three are overloaded, the briefing and the chat say so and the
+  rest of the dashboard still works.
 - **A failed database query and an empty table look the same on screen.** The
   outside systems report their failures honestly; Supabase queries do not, yet.
 - **The briefing cache is per server instance,** as described above.

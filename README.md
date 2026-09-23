@@ -46,7 +46,9 @@ Live: _add the Vercel URL here once deployed_
 4. **Credentials -> Create OAuth client ID -> Web application**. Authorized
    redirect URI is the callback Supabase shows on its Google provider page,
    which looks like `https://<project-ref>.supabase.co/auth/v1/callback`.
-5. Copy the client ID and secret back into Supabase (step 1.3).
+5. Copy the client ID and secret back into Supabase (step 1.3), and also into
+   `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`. The app uses them to renew the
+   hourly Google token, so the calendar keeps working without signing in again.
 
 ### 3. Run it locally
 
@@ -63,7 +65,7 @@ npm i -g vercel && vercel        # first deploy, links the project
 vercel --prod
 ```
 
-Add the same four variables in **Vercel -> Settings -> Environment Variables**.
+Add the same six variables in **Vercel -> Settings -> Environment Variables**.
 After that, `git push` deploys automatically.
 
 ## Where secrets live
@@ -74,11 +76,15 @@ Nowhere in this repo. `.env.local` is gitignored and never committed.
 |---|---|---|
 | `NEXT_PUBLIC_SUPABASE_URL` | Vercel env vars | Yes, and that is fine |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Vercel env vars | Yes. Safe **only** because row-level security is on every table |
-| `SUPABASE_SERVICE_ROLE_KEY` | Vercel env vars, server only | **Never** |
-| Google access token | `integration_tokens` table, per user | **Never** |
+| `OPENROUTER_API_KEY` | Vercel env vars, server only | **Never** |
+| `GITHUB_TOKEN` (read-only, fine-grained) | Vercel env vars, server only | **Never** |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Vercel env vars, server only | **Never** |
+| Google access and refresh tokens | `integration_tokens` table, per user | **Never** |
 
-**To rotate a leaked key:** Supabase Dashboard -> Settings -> API -> roll the
-key, paste the new value into Vercel, redeploy. For a leaked Google secret,
+**To rotate a leaked key:** make a new one where it came from (Supabase
+Dashboard -> Settings -> API, openrouter.ai -> Keys, github.com -> Settings ->
+Developer settings), paste the new value into Vercel, redeploy, then delete the
+old one. For a leaked Google secret,
 reset it in Google Cloud Credentials and update Supabase's Google provider. The
 old value stops working immediately in both cases.
 

@@ -24,11 +24,18 @@ export async function getBriefing(): Promise<BriefingResult> {
     return { ok: true, text: cache.text, cached: true };
   }
 
-  if (!aiConfigured()) {
-    return { ok: false, message: "No OpenRouter key is configured, so the briefing cannot be written." };
-  }
-
   const supabase = await createClient();
+  // Same rule as every other integration: a failure lands in integration_log.
+  const fail = async (message: string): Promise<BriefingResult> => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) await supabase.from("integration_log").insert({
+      user_id: user.id, provider: "openrouter", ok: false, status: null, message });
+    return { ok: false, message };
+  };
+
+  if (!aiConfigured()) {
+    return fail("No OpenRouter key is configured, so the briefing cannot be written.");
+  }
   const [tasks, projects, blockers, metrics, calendar, github] = await Promise.all([
     supabase.from("tasks").select("title,priority,due_on,status").neq("status", "done").order("priority").limit(25),
     supabase.from("projects").select("name,status").eq("status", "active").limit(15),
@@ -64,10 +71,10 @@ export async function getBriefing(): Promise<BriefingResult> {
 
     const text = (message.content ?? "").trim();
 
-    if (!text) return { ok: false, message: "The AI returned an empty briefing." };
+    if (!text) return fail("The AI returned an empty briefing.");
     cache = { text, at: Date.now() };
     return { ok: true, text, cached: false };
   } catch (e) {
-    return { ok: false, message: e instanceof Error ? e.message : "The briefing request failed." };
+    return fail(e instanceof Error ? e.message : "The briefing request failed.");
   }
 }

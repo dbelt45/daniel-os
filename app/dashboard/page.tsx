@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import { getTodaysEvents } from "@/lib/google-calendar";
+import { getTodaysEvents, TZ } from "@/lib/google-calendar";
 import { getGithubActivity } from "@/lib/github";
 import { getBriefing } from "@/lib/briefing";
 import { Chat } from "@/components/Chat";
@@ -37,7 +37,7 @@ export default async function Dashboard() {
     ]);
 
   const today = new Date().toLocaleDateString("en-US",
-    { weekday: "long", month: "long", day: "numeric" });
+    { weekday: "long", month: "long", day: "numeric", timeZone: TZ });
 
   return (
     <main className="mx-auto w-full max-w-5xl px-4 py-6 sm:px-6 sm:py-10">
@@ -93,7 +93,7 @@ export default async function Dashboard() {
                       {e.allDay || !e.start
                         ? "all day"
                         : new Date(e.start).toLocaleTimeString("en-US",
-                            { hour: "numeric", minute: "2-digit" })}
+                            { hour: "numeric", minute: "2-digit", timeZone: TZ })}
                     </span>
                     <span className="min-w-0 flex-1 truncate text-sm">{e.summary}</span>
                   </li>
@@ -132,7 +132,7 @@ export default async function Dashboard() {
                     {r.name}
                     <span className="text-[var(--muted)]">
                       {" "}pushed {new Date(r.pushedAt).toLocaleDateString("en-US",
-                        { month: "short", day: "numeric" })}
+                        { month: "short", day: "numeric", timeZone: TZ })}
                     </span>
                   </li>
                 ))}

@@ -9,11 +9,15 @@
 //    OpenRouter's failover never fires. We check every reply for that and, if
 //    found, ask again starting from the next model in the list.
 // Inkling scores higher but OpenRouter only serves it free to coding agents.
+// Every model here can call tools. "openrouter/free" is deliberately NOT here:
+// it picked tiny models that answered "I don't have access to your tasks",
+// and a wrong answer is worse than an honest "busy, try again".
 export const MODELS = [
   "nvidia/nemotron-3-ultra-550b-a55b:free", // strongest free model that serves apps
-  "nvidia/nemotron-3-super-120b-a12b:free", // same family, faster
-  "openrouter/free",                        // OpenRouter picks any free model that is up
+  "nvidia/nemotron-3-super-120b-a12b:free", // same family
+  "google/gemma-4-31b-it:free",             // different company, so a different queue
 ];
+// OpenRouter rejects a `models` list longer than 3, so keep this at 3.
 
 export type Message = {
   role: "system" | "user" | "assistant" | "tool";
@@ -50,6 +54,9 @@ export async function complete(messages: Message[], opts: { maxTokens: number; t
           // Let the model think (turning it off made it skip tools), but keep the
           // thinking out of the reply so "Okay, the user asked..." never shows.
           reasoning: { exclude: true },
+          // Without this OpenRouter may route to a provider that silently drops
+          // `tools`, and the model then invents tool calls as plain text.
+          provider: { require_parameters: true },
           max_tokens: opts.maxTokens,
           ...(opts.tools ? { tools: opts.tools } : {}),
         }),
@@ -58,13 +65,21 @@ export async function complete(messages: Message[], opts: { maxTokens: number; t
       const body = await res.json().catch(() => ({}));
       const choice = body.choices?.[0];
       const error = body.error?.message ?? choice?.error?.message;
-      if (!res.ok || error || !choice?.message) {
+      if (!res.ok) {
         // A bad key fails every model the same way, so stop and say so.
         if (res.status === 401) throw new Error("OpenRouter rejected the key (401).");
+        // Otherwise OpenRouter already tried every model left in the list.
+        // Retrying would only burn more of the 50 free requests a day.
         failures.push(`${model}: ${error ?? `HTTP ${res.status}`}`);
+        break;
+      }
+      if (error || !choice?.message) {
+        // A "success" hiding an error. Skip past whichever model sent it.
+        failures.push(`${body.model ?? model}: ${error ?? "empty reply"}`);
+        i = Math.max(i, MODELS.indexOf(body.model));
         continue;
       }
-      return { message: choice.message as Message, finish: choice.finish_reason as string };
+      return { message: choice.message as Message, finish: choice.finish_reason as string, model: String(body.model ?? model) };
     } catch (e) {
       if (e instanceof Error && e.message.startsWith("OpenRouter rejected")) throw e;
       failures.push(`${model}: ${e instanceof Error ? e.message : "request failed"}`);

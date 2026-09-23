@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import { getTodaysEvents } from "@/lib/google-calendar";
+import { getTodaysEvents, TZ } from "@/lib/google-calendar";
 import { getGithubActivity } from "@/lib/github";
 import { aiConfigured, complete, VOICE } from "@/lib/ai";
 
@@ -46,7 +46,7 @@ export async function getBriefing(): Promise<BriefingResult> {
   ]);
 
   const facts = {
-    today: new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" }),
+    today: new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric", timeZone: TZ }),
     openTasks: tasks.data ?? [],
     activeProjects: projects.data ?? [],
     openBlockers: blockers.data ?? [],

@@ -82,7 +82,7 @@ if (!key) {
       method: "POST",
       headers: { Authorization: `Bearer ${key}`, "content-type": "application/json" },
       body: JSON.stringify({
-        models: ["nvidia/nemotron-3-ultra-550b-a55b:free", "nvidia/nemotron-3-super-120b-a12b:free", "openrouter/free"],
+        models: ["nvidia/nemotron-3-ultra-550b-a55b:free", "nvidia/nemotron-3-super-120b-a12b:free", "google/gemma-4-31b-it:free"],
         max_tokens: 16,
         reasoning: { enabled: false },
         messages: [{ role: "user", content: "Reply with the word ready." }],

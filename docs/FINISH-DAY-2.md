@@ -8,7 +8,7 @@ Four steps, about ten minutes, in this order. Everything else is done.
 
 Ricky directive 2026-09-22: no Anthropic or OpenAI keys. Every AI call goes
 through OpenRouter on free models, tried in order: Nemotron 3 Ultra, Nemotron 3
-Super, then `openrouter/free`. The list lives in `lib/ai.ts`.
+Super, then Google Gemma 4. The list lives in `lib/ai.ts`.
 
 1. **openrouter.ai**, sign in with your own Google account.
 2. Top right menu, **Keys**, then **Create Key**. Name it `daniel-os`, leave the

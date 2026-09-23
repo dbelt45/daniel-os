@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { getTodaysEvents } from "@/lib/google-calendar";
+import { getTodaysEvents, TZ } from "@/lib/google-calendar";
 import { getGithubActivity } from "@/lib/github";
 import { aiConfigured, complete, VOICE, type Message, type Tool } from "@/lib/ai";
 
@@ -136,7 +136,16 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false, message: "Nothing to answer." }, { status: 400 });
   }
 
-  const messages: Message[] = [{ role: "system", content: VOICE }, ...history];
+  // The model does not know the date unless told, so "overdue" and "due
+  // tomorrow" were guesses. Tested: adding "always call a tool" here made the
+  // free models type tool calls out as text instead of making them, so the
+  // tool descriptions alone carry that job.
+  const today = new Date().toLocaleDateString("en-US",
+    { weekday: "long", month: "long", day: "numeric", year: "numeric", timeZone: TZ });
+  const system = `${VOICE}
+
+Today is ${today}.`;
+  const messages: Message[] = [{ role: "system", content: system }, ...history];
   try {
     // Manual tool loop. Five rounds covers "what is overdue, close the first one".
     for (let round = 0; round < 5; round++) {
@@ -145,6 +154,12 @@ export async function POST(request: NextRequest) {
 
       if (calls.length === 0) {
         const text = (message.content ?? "").trim();
+        // Busy free models sometimes type a tool call out as JSON instead of
+        // making it. Nothing was done, so say that rather than show the code.
+        if (/^[{\[]/.test(text) && /"(tool|name|function)"/.test(text)) {
+          return NextResponse.json({ ok: true, reply:
+            "I tried to do that but the free AI model answered in a broken format, so nothing changed. Please ask again." });
+        }
         return NextResponse.json({ ok: true, reply: text || "I have nothing to add." });
       }
 

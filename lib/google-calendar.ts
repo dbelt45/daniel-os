@@ -1,5 +1,9 @@
 import { createClient } from "@/lib/supabase/server";
 
+// Vercel's servers run on UTC, so "today" and every displayed time must name
+// Daniel's timezone explicitly, or after 7 PM the dashboard shows tomorrow.
+export const TZ = "America/Chicago";
+
 export type CalendarEvent = {
   id: string;
   summary: string;
@@ -72,12 +76,15 @@ export async function getTodaysEvents(): Promise<CalendarResult> {
   }
 
   const now = new Date();
-  const start = new Date(now); start.setHours(0, 0, 0, 0);
-  const end = new Date(now); end.setHours(23, 59, 59, 999);
+  // Midnight to midnight in Austin, written with Austin's UTC offset.
+  // ponytail: on the two daylight-saving switch days the window is an hour off.
+  const ymd = now.toLocaleDateString("en-CA", { timeZone: TZ });
+  const offset = new Intl.DateTimeFormat("en-US", { timeZone: TZ, timeZoneName: "longOffset" })
+    .formatToParts(now).find((p) => p.type === "timeZoneName")!.value.replace("GMT", "") || "Z";
 
   const url = new URL("https://www.googleapis.com/calendar/v3/calendars/primary/events");
-  url.searchParams.set("timeMin", start.toISOString());
-  url.searchParams.set("timeMax", end.toISOString());
+  url.searchParams.set("timeMin", `${ymd}T00:00:00${offset}`);
+  url.searchParams.set("timeMax", `${ymd}T23:59:59${offset}`);
   url.searchParams.set("singleEvents", "true");
   url.searchParams.set("orderBy", "startTime");
   url.searchParams.set("maxResults", "20");
